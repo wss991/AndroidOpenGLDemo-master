@@ -45,6 +45,7 @@ public class TimeFilter extends NoFilter {
         super.onCreate();
         mFilter.create();
         MatrixUtils.flip(mFilter.getMatrix(), false, true);
+        MatrixUtils.rotate(mFilter.getMatrix(), -90);
     }
 
     @Override

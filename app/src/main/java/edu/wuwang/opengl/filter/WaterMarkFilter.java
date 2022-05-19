@@ -90,7 +90,7 @@ public class WaterMarkFilter extends NoFilter {
             GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_CLAMP_TO_EDGE);
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, mBitmap, 0);
             MatrixUtils.flip(mFilter.getMatrix(),false,true);
-
+            MatrixUtils.rotate(mFilter.getMatrix(), -90);
             mFilter.setTextureId(textures[0]);
         }
     }
@@ -99,8 +99,8 @@ public class WaterMarkFilter extends NoFilter {
     public void setPosition(int x,int y,int width,int height){
         this.x=x;
         this.y=y;
-        this.w=width;
-        this.h=height;
+        //this.w=width;
+       // this.h=height;
     }
 
 }

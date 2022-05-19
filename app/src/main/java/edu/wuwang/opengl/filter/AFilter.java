@@ -341,4 +341,8 @@ public abstract class AFilter {
     }
 
 
+    public void setDisplayOrige(){
+
+    }
+
 }

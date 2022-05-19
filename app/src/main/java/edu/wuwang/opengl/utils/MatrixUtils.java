@@ -91,6 +91,8 @@ public enum MatrixUtils {
             Matrix.setLookAtM(camera,0,0,0,1,0,0,0,0,1,0);
             Matrix.multiplyMM(matrix,0,projection,0,camera,0);
         }
+
+       rotate(matrix,90);
     }
 
     public static void getCenterInsideMatrix(float[] matrix,int imgWidth,int imgHeight,int viewWidth,int

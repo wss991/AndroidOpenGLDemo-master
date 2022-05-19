@@ -12,14 +12,21 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 import android.Manifest;
+import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
@@ -69,10 +76,12 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
     private SurfaceView mSurfaceView;
     private TextureController mController;
     private Renderer mRenderer;
-    private int cameraId = 1;
+    private int cameraId = 0;
     private MediaRecorder mMediaRecorder;
     private boolean isRecording; // 是否正在录制
     private SurfaceHolder mHolder;
+    private int outWidth;
+    private int outHeight;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -104,12 +113,12 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
             setContentView();
             mSurfaceView = (SurfaceView) findViewById(R.id.mSurface);
             mController = new TextureController(Camera2Activity.this);
-            TimeFilter filter = new TimeFilter(getResources());
+            WaterMarkFilter filter = new WaterMarkFilter(getResources());
             filter.setWaterMark(BitmapFactory.decodeResource(getResources(), R.mipmap.logo));
-            filter.setPosition(300, 500, 300, 150);
+            filter.setPosition(200, 800, 300, 150);
             mController.addFilter(filter);
-          //  onFilterSet(mController);
-            mController.setFrameCallback(720, 1280, Camera2Activity.this);
+            //  onFilterSet(mController);
+
             mSurfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
                 @Override
                 public void surfaceCreated(SurfaceHolder holder) {
@@ -185,7 +194,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                Bitmap bitmap = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888);
+                Bitmap bitmap = Bitmap.createBitmap(mController.getmDataSize().x, mController.getmDataSize().y, Bitmap.Config.ARGB_8888);
                 ByteBuffer b = ByteBuffer.wrap(bytes);
                 bitmap.copyPixelsFromBuffer(b);
                 saveBitmap(bitmap);
@@ -259,6 +268,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
             mController.setImageDirection(cameraId);
             Camera.Size size = mCamera.getParameters().getPreviewSize();
             mController.setDataSize(size.height, size.width);
+            mController.setFrameCallback(720, 1280, Camera2Activity.this);
             try {
                 mCamera.setPreviewTexture(mController.getTexture());
                 mController.getTexture().setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
@@ -338,6 +348,9 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
         private Handler mHandler;
         private Size mPreviewSize;
 
+        private int realPreviewWidth = 0;
+        private int realPreviewHeight = 0;
+
         Camera2Renderer() {
             mCameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
             mThread = new HandlerThread("camera2 ");
@@ -355,6 +368,10 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
 
         @Override
         public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+            extracted();
+        }
+
+        private void extracted() {
             try {
                 if (mDevice != null) {
                     mDevice.close();
@@ -362,10 +379,20 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                 }
                 CameraCharacteristics c = mCameraManager.getCameraCharacteristics(cameraId + "");
                 StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
                 Size[] sizes = map.getOutputSizes(SurfaceHolder.class);
                 //自定义规则，选个大小
                 mPreviewSize = sizes[0];
-                mController.setDataSize(mPreviewSize.getHeight(), mPreviewSize.getWidth());
+                realPreviewWidth = mPreviewSize.getWidth();
+                realPreviewHeight = mPreviewSize.getHeight();
+                int displayRotation = Camera2Activity.this.getWindowManager().getDefaultDisplay().getRotation();
+                if (displayRotation == 90 || displayRotation == 270) {
+                    realPreviewWidth = mPreviewSize.getHeight();
+                    realPreviewHeight = mPreviewSize.getWidth();
+
+                }
+                mController.setDataSize(realPreviewWidth, realPreviewHeight);
+                mController.setFrameCallback(realPreviewWidth,realPreviewHeight, Camera2Activity.this);
                 mCameraManager.openCamera(cameraId + "", new CameraDevice.StateCallback() {
                     @Override
                     public void onOpened(CameraDevice camera) {
@@ -377,7 +404,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                                     (TEMPLATE_PREVIEW);
                             builder.addTarget(surface);
                             mController.getTexture().setDefaultBufferSize(
-                                    mPreviewSize.getWidth(), mPreviewSize.getHeight());
+                                    realPreviewWidth, realPreviewHeight);
                             mDevice.createCaptureSession(Arrays.asList(surface), new
                                     CameraCaptureSession.StateCallback() {
                                         @Override
@@ -434,5 +461,28 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
         public void onDrawFrame(GL10 gl) {
 
         }
+
+        private  Size chooseOptimalSize(Size[] choices, int textureViewWidth,
+                                              int textureViewHeight, int maxWidth, int maxHeight, Size aspectRatio) {
+
+            // Collect the supported resolutions that are at least as big as the preview Surface
+            List<Size> bigEnough = new ArrayList<>();
+            // Collect the supported resolutions that are smaller than the preview Surface
+            List<Size> notBigEnough = new ArrayList<>();
+            int w = aspectRatio.getWidth();
+            int h = aspectRatio.getHeight();
+            for (Size option : choices) {
+                if (option.getWidth() <= maxWidth && option.getHeight() <= maxHeight &&
+                        option.getHeight() == option.getWidth() * h / w) {
+                    if (option.getWidth() >= textureViewWidth &&
+                            option.getHeight() >= textureViewHeight) {
+                        bigEnough.add(option);
+                    } else {
+                        notBigEnough.add(option);
+                    }
+                }
+            }
     }
+
+
 }
