@@ -63,7 +63,7 @@ public class TimeMarkFilter extends NoFilter {
             this.mBitmap = bitmapUtil.getBitmap(timeFormat.format(new Date()));
             createTexture();
         }
-        GLES20.glViewport(x,y,w==0?mBitmap.getWidth():w,h==0?mBitmap.getHeight():h);
+        GLES20.glViewport(x,y,h==0?mBitmap.getHeight():h,w==0?mBitmap.getWidth():w);
         GLES20.glDisable(GLES20.GL_DEPTH_TEST);
         GLES20.glEnable(GLES20.GL_BLEND);
         GLES20.glBlendFunc(GLES20.GL_SRC_COLOR,GLES20.GL_DST_ALPHA);
@@ -110,6 +110,7 @@ public class TimeMarkFilter extends NoFilter {
 
             if (matrixed){
                 MatrixUtils.flip(mFilter.getMatrix(),false,true);
+                MatrixUtils.rotate(mFilter.getMatrix(),-90);
                 matrixed=false;
             }
 

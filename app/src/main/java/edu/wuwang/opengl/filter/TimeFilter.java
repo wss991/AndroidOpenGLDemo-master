@@ -65,16 +65,17 @@ public class TimeFilter extends NoFilter {
     private void drawTime() {
         String dateStr = timeFormat.format(new Date());
         Bitmap bitmap = null;
-        int marginLeft = x;
+        int marginLeft = y;
         Log.e(TAG, "drawTime: " + marginLeft);
         for (int i = 0; i < dateStr.length(); i++) { // 此处 可以换成一张图片，所有文字画在一起
             bitmap = timeBitmapUtils.getBitmapByText(((Character) dateStr.charAt(i)).toString());
             if (bitmap != null) {
-                GLES20.glViewport(marginLeft, y, bitmap.getWidth(), bitmap.getHeight());
+                GLES20.glViewport(x, marginLeft, bitmap.getHeight(), bitmap.getWidth());
                 GLES20.glDisable(GLES20.GL_DEPTH_TEST);
                 GLES20.glEnable(GLES20.GL_BLEND);
                 GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA);
                 createTexture(bitmap);
+
                 marginLeft = marginLeft + bitmap.getWidth();
 
             }

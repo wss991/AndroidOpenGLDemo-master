@@ -45,7 +45,7 @@ public class TextureController implements GLSurfaceView.Renderer {
     private Point mWindowSize;                                  //输出视图的大小
     private AtomicBoolean isParamSet = new AtomicBoolean(false);
     private float[] SM = new float[16];                           //用于绘制到屏幕上的变换矩阵
-    private int mShowType = MatrixUtils.TYPE_CENTERCROP;          //输出到屏幕上的方式
+    private int mShowType = MatrixUtils.TYPE_CENTERINSIDE;          //输出到屏幕上的方式
     private int mDirectionFlag = -1;                               //AiyaFilter方向flag
 
     private float[] callbackOM = new float[16];                   //用于绘制回调缩放的矩阵
@@ -60,6 +60,8 @@ public class TextureController implements GLSurfaceView.Renderer {
     private FrameCallback mFrameCallback;                       //回调
     private int frameCallbackWidth, frameCallbackHeight;        //回调数据的宽高
     private int indexOutput = 0;                                  //回调数据使用的buffer索引
+    private float scaleX = 1;
+    private float scaleY = 1;
 
     public TextureController(Context context) {
         this.mContext = context;
@@ -157,6 +159,7 @@ public class TextureController implements GLSurfaceView.Renderer {
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         MatrixUtils.getMatrix(SM, mShowType,
                 mDataSize.x, mDataSize.y, width, height);
+      //  MatrixUtils.scale(SM,scaleX,scaleY);
         mShowFilter.setSize(width, height);
         //   mShowFilter.setMatrix(SM);
         mGroupFilter.setSize(mDataSize.x, mDataSize.y);
@@ -311,6 +314,11 @@ public class TextureController implements GLSurfaceView.Renderer {
 
     public void onResume() {
         mGLView.onResume();
+    }
+
+    public void setScale(float x, float y) {
+        scaleX = x;
+        scaleY = y;
     }
 
     /**

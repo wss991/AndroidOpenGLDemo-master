@@ -52,7 +52,7 @@ public final class BitmapUtil {
     public final Bitmap getBitmap(String text) {
         if (!TextUtils.isEmpty((CharSequence) text)) {
             Paint paint = new Paint();
-            paint.setTextSize(200.0F);
+            paint.setTextSize(100.0F);
             paint.setColor(Color.parseColor("#ff0000"));
             Paint.FontMetricsInt metrics = paint.getFontMetricsInt();
             int height = 200;

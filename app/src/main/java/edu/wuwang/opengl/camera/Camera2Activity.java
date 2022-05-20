@@ -26,6 +26,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.graphics.Point;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
@@ -48,11 +49,13 @@ import android.os.HandlerThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.RequiresApi;
+import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.Window;
 import android.widget.Toast;
 
 import edu.wuwang.opengl.BaseActivity;
@@ -61,8 +64,10 @@ import edu.wuwang.opengl.etc.ZipAniView;
 import edu.wuwang.opengl.filter.GrayFilter;
 import edu.wuwang.opengl.filter.NoFilter;
 import edu.wuwang.opengl.filter.TimeFilter;
+import edu.wuwang.opengl.filter.TimeMarkFilter;
 import edu.wuwang.opengl.filter.WaterMarkFilter;
 import edu.wuwang.opengl.filter.ZipPkmAnimationFilter;
+import edu.wuwang.opengl.utils.CompareSizesByArea;
 import edu.wuwang.opengl.utils.PermissionUtils;
 
 import static android.hardware.camera2.CameraDevice.TEMPLATE_PREVIEW;
@@ -86,6 +91,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         PermissionUtils.askPermission(this, new String[]{Manifest.permission.CAMERA, Manifest
                 .permission.WRITE_EXTERNAL_STORAGE}, 10, initViewRunnable);
     }
@@ -113,9 +119,9 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
             setContentView();
             mSurfaceView = (SurfaceView) findViewById(R.id.mSurface);
             mController = new TextureController(Camera2Activity.this);
-            WaterMarkFilter filter = new WaterMarkFilter(getResources());
+            TimeMarkFilter filter = new TimeMarkFilter(getResources());
             filter.setWaterMark(BitmapFactory.decodeResource(getResources(), R.mipmap.logo));
-            filter.setPosition(200, 800, 300, 150);
+            filter.setPosition(0, 0, 300, 150);
             mController.addFilter(filter);
             //  onFilterSet(mController);
 
@@ -129,6 +135,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
 
                 @Override
                 public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                    Log.e("Camera2Renderer", "surfaceChanged: "+width+" "+height);
                     mController.surfaceChanged(width, height);
                 }
 
@@ -350,6 +357,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
 
         private int realPreviewWidth = 0;
         private int realPreviewHeight = 0;
+        private static final String TAG = "Camera2Renderer";
 
         Camera2Renderer() {
             mCameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
@@ -380,19 +388,49 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                 CameraCharacteristics c = mCameraManager.getCameraCharacteristics(cameraId + "");
                 StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
 
-                Size[] sizes = map.getOutputSizes(SurfaceHolder.class);
+
+                Size largest = Collections.max(
+                        Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
+                        new CompareSizesByArea());
+
+                Point displaySize = new Point();
+                Camera2Activity.this.getWindowManager().getDefaultDisplay().getSize(displaySize);
+                realPreviewWidth = mSurfaceView.getWidth();
+                realPreviewHeight = mSurfaceView.getHeight();
+                int maxPreviewWidth = displaySize.x;
+                int maxPreviewHeight = displaySize.y;
+
                 //自定义规则，选个大小
-                mPreviewSize = sizes[0];
-                realPreviewWidth = mPreviewSize.getWidth();
-                realPreviewHeight = mPreviewSize.getHeight();
+               
                 int displayRotation = Camera2Activity.this.getWindowManager().getDefaultDisplay().getRotation();
                 if (displayRotation == 90 || displayRotation == 270) {
-                    realPreviewWidth = mPreviewSize.getHeight();
-                    realPreviewHeight = mPreviewSize.getWidth();
+                    realPreviewWidth = mSurfaceView.getHeight();
+                    realPreviewHeight =mSurfaceView.getWidth();
 
                 }
+
+                mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
+                        realPreviewWidth, realPreviewHeight, maxPreviewWidth,
+                        maxPreviewHeight, largest);
+                
+                Log.e(TAG, "extracted: " + mSurfaceView.getWidth() + "  " + mSurfaceView.getHeight());
+                Log.e(TAG, "extracted: " + realPreviewWidth+ "  " + realPreviewHeight);
+                Log.e(TAG, "extracted: mPreviewSize " + mPreviewSize.getWidth()+ "  " + mPreviewSize.getHeight());
+
+
+                if (displayRotation == 90 || displayRotation == 270) {
+               //     mController.setScale(mPreviewSize.getHeight()*100/(realPreviewWidth/100f), mPreviewSize.getWidth()*100/(realPreviewHeight/100f));
+                    realPreviewWidth = mPreviewSize.getHeight();
+                    realPreviewHeight =mPreviewSize.getWidth();
+
+                }else{
+                  //  mController.setScale(mPreviewSize.getWidth()*100/realPreviewWidth/100f, mPreviewSize.getHeight()*100/realPreviewHeight/100f);
+
+                    realPreviewWidth = mPreviewSize.getWidth();
+                    realPreviewHeight =mPreviewSize.getHeight();
+                }
                 mController.setDataSize(realPreviewWidth, realPreviewHeight);
-                mController.setFrameCallback(realPreviewWidth,realPreviewHeight, Camera2Activity.this);
+                mController.setFrameCallback(realPreviewWidth, realPreviewHeight, Camera2Activity.this);
                 mCameraManager.openCamera(cameraId + "", new CameraDevice.StateCallback() {
                     @Override
                     public void onOpened(CameraDevice camera) {
@@ -452,18 +490,8 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
             }
         }
 
-        @Override
-        public void onSurfaceChanged(GL10 gl, int width, int height) {
-
-        }
-
-        @Override
-        public void onDrawFrame(GL10 gl) {
-
-        }
-
-        private  Size chooseOptimalSize(Size[] choices, int textureViewWidth,
-                                              int textureViewHeight, int maxWidth, int maxHeight, Size aspectRatio) {
+        private Size chooseOptimalSize(Size[] choices, int textureViewWidth,
+                                       int textureViewHeight, int maxWidth, int maxHeight, Size aspectRatio) {
 
             // Collect the supported resolutions that are at least as big as the preview Surface
             List<Size> bigEnough = new ArrayList<>();
@@ -482,6 +510,29 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                     }
                 }
             }
+
+            // Pick the smallest of those big enough. If there is no one big enough, pick the
+            // largest of those not big enough.
+            if (bigEnough.size() > 0) {
+                return Collections.min(bigEnough, new CompareSizesByArea());
+            } else if (notBigEnough.size() > 0) {
+                return Collections.max(notBigEnough, new CompareSizesByArea());
+            } else {
+                Log.e(TAG, "Couldn't find any suitable preview size");
+                return choices[0];
+            }
+        }
+
+        @Override
+        public void onSurfaceChanged(GL10 gl, int width, int height) {
+
+        }
+
+        @Override
+        public void onDrawFrame(GL10 gl) {
+
+        }
+
     }
 
 
