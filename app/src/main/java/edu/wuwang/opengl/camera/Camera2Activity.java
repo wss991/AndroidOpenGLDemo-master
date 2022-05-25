@@ -7,27 +7,13 @@
  */
 package edu.wuwang.opengl.camera;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-
-import javax.microedition.khronos.egl.EGLConfig;
-import javax.microedition.khronos.opengles.GL10;
+import static android.hardware.camera2.CameraDevice.TEMPLATE_PREVIEW;
 
 import android.Manifest;
-import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
-import android.graphics.Matrix;
 import android.graphics.Point;
-import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
@@ -40,12 +26,13 @@ import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.MediaRecorder;
-import android.opengl.GLES20;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Message;
+import android.os.Process;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.RequiresApi;
@@ -58,19 +45,30 @@ import android.view.View;
 import android.view.Window;
 import android.widget.Toast;
 
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.opengles.GL10;
+
 import edu.wuwang.opengl.BaseActivity;
 import edu.wuwang.opengl.R;
-import edu.wuwang.opengl.etc.ZipAniView;
-import edu.wuwang.opengl.filter.GrayFilter;
-import edu.wuwang.opengl.filter.NoFilter;
-import edu.wuwang.opengl.filter.TimeFilter;
+import edu.wuwang.opengl.encoder.AudioRecorderHandlerThread;
+import edu.wuwang.opengl.encoder.Messages;
+import edu.wuwang.opengl.encoder.VideoEncoder;
 import edu.wuwang.opengl.filter.TimeMarkFilter;
-import edu.wuwang.opengl.filter.WaterMarkFilter;
 import edu.wuwang.opengl.filter.ZipPkmAnimationFilter;
 import edu.wuwang.opengl.utils.CompareSizesByArea;
 import edu.wuwang.opengl.utils.PermissionUtils;
-
-import static android.hardware.camera2.CameraDevice.TEMPLATE_PREVIEW;
 
 
 /**
@@ -88,12 +86,14 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
     private int outWidth;
     private int outHeight;
 
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         PermissionUtils.askPermission(this, new String[]{Manifest.permission.CAMERA, Manifest
-                .permission.WRITE_EXTERNAL_STORAGE}, 10, initViewRunnable);
+                .permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO}, 10, initViewRunnable);
+
     }
 
     protected void onFilterSet(TextureController controller) {
@@ -106,6 +106,23 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
         setContentView(R.layout.activity_camera2);
     }
 
+    private Handler mHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            switch (msg.what) {
+                case Messages.MSG_CHANGE_BUTTON_ENABLED:
+
+                    break;
+                case Messages.MSG_RECORDING_START_CALLBACK:
+
+                    break;
+                case Messages.MSG_RECORDING_STOP_CALLBACK:
+
+                    break;
+            }
+        }
+    };
     private Runnable initViewRunnable = new Runnable() {
         @Override
         public void run() {
@@ -135,7 +152,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
 
                 @Override
                 public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                    Log.e("Camera2Renderer", "surfaceChanged: "+width+" "+height);
+                    Log.e("Camera2Renderer", "surfaceChanged: " + width + " " + height);
                     mController.surfaceChanged(width, height);
                 }
 
@@ -144,6 +161,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                     mController.surfaceDestroyed();
                 }
             });
+
 
         }
     };
@@ -165,7 +183,13 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
         switch (view.getId()) {
             case R.id.mShutter:
                 mController.takePhoto();
-                startRecording();
+                if (isRecording) {
+                    mController.stopRecord();
+                } else {
+                    mController.startRecord(getExternalCacheDir() + File.separator + "mp4record.mp4");
+                }
+                isRecording = !isRecording;
+               // startRecording();
                 break;
         }
     }
@@ -176,6 +200,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
         if (mController != null) {
             mController.onResume();
         }
+
     }
 
     @Override
@@ -194,11 +219,12 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
             mController.destroy();
         }
 
+
     }
 
     @Override
     public void onFrame(final byte[] bytes, long time) {
-        new Thread(new Runnable() {
+/*        new Thread(new Runnable() {
             @Override
             public void run() {
                 Bitmap bitmap = Bitmap.createBitmap(mController.getmDataSize().x, mController.getmDataSize().y, Bitmap.Config.ARGB_8888);
@@ -207,7 +233,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                 saveBitmap(bitmap);
                 bitmap.recycle();
             }
-        }).start();
+        }).start();*/
     }
 
     protected String getSD() {
@@ -344,6 +370,9 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
             mMediaRecorder.release();
             mMediaRecorder = null;
         }
+        if (mController!=null) mController.stopRecord();
+
+
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -401,33 +430,33 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                 int maxPreviewHeight = displaySize.y;
 
                 //自定义规则，选个大小
-               
+
                 int displayRotation = Camera2Activity.this.getWindowManager().getDefaultDisplay().getRotation();
                 if (displayRotation == 90 || displayRotation == 270) {
                     realPreviewWidth = mSurfaceView.getHeight();
-                    realPreviewHeight =mSurfaceView.getWidth();
+                    realPreviewHeight = mSurfaceView.getWidth();
 
                 }
 
                 mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
                         realPreviewWidth, realPreviewHeight, maxPreviewWidth,
                         maxPreviewHeight, largest);
-                
+
                 Log.e(TAG, "extracted: " + mSurfaceView.getWidth() + "  " + mSurfaceView.getHeight());
-                Log.e(TAG, "extracted: " + realPreviewWidth+ "  " + realPreviewHeight);
-                Log.e(TAG, "extracted: mPreviewSize " + mPreviewSize.getWidth()+ "  " + mPreviewSize.getHeight());
+                Log.e(TAG, "extracted: " + realPreviewWidth + "  " + realPreviewHeight);
+                Log.e(TAG, "extracted: mPreviewSize " + mPreviewSize.getWidth() + "  " + mPreviewSize.getHeight());
 
 
                 if (displayRotation == 90 || displayRotation == 270) {
-               //     mController.setScale(mPreviewSize.getHeight()*100/(realPreviewWidth/100f), mPreviewSize.getWidth()*100/(realPreviewHeight/100f));
+                    //     mController.setScale(mPreviewSize.getHeight()*100/(realPreviewWidth/100f), mPreviewSize.getWidth()*100/(realPreviewHeight/100f));
                     realPreviewWidth = mPreviewSize.getHeight();
-                    realPreviewHeight =mPreviewSize.getWidth();
+                    realPreviewHeight = mPreviewSize.getWidth();
 
-                }else{
-                  //  mController.setScale(mPreviewSize.getWidth()*100/realPreviewWidth/100f, mPreviewSize.getHeight()*100/realPreviewHeight/100f);
+                } else {
+                    //  mController.setScale(mPreviewSize.getWidth()*100/realPreviewWidth/100f, mPreviewSize.getHeight()*100/realPreviewHeight/100f);
 
                     realPreviewWidth = mPreviewSize.getWidth();
-                    realPreviewHeight =mPreviewSize.getHeight();
+                    realPreviewHeight = mPreviewSize.getHeight();
                 }
                 mController.setDataSize(realPreviewWidth, realPreviewHeight);
                 mController.setFrameCallback(realPreviewWidth, realPreviewHeight, Camera2Activity.this);
@@ -485,6 +514,8 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
 
                     }
                 }, mHandler);
+
+
             } catch (SecurityException | CameraAccessException e) {
                 e.printStackTrace();
             }

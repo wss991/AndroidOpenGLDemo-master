@@ -1,9 +1,16 @@
 package edu.wuwang.opengl.camera;
 
 import android.graphics.Matrix;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Process;
 import android.view.View;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.microedition.khronos.egl.EGL10;
@@ -20,6 +27,10 @@ import android.opengl.GLSurfaceView;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
+
+import edu.wuwang.opengl.encoder.AudioRecorderHandlerThread;
+import edu.wuwang.opengl.encoder.VideoEncoder;
+import edu.wuwang.opengl.encoder.YUVRotateUtil;
 import edu.wuwang.opengl.filter.AFilter;
 import edu.wuwang.opengl.filter.GroupFilter;
 import edu.wuwang.opengl.filter.NoFilter;
@@ -62,6 +73,10 @@ public class TextureController implements GLSurfaceView.Renderer {
     private int indexOutput = 0;                                  //回调数据使用的buffer索引
     private float scaleX = 1;
     private float scaleY = 1;
+
+
+    private VideoEncoder encoder;
+    private AudioRecorderHandlerThread audioRecorderHandlerThread;
 
     public TextureController(Context context) {
         this.mContext = context;
@@ -116,6 +131,11 @@ public class TextureController implements GLSurfaceView.Renderer {
     public void setDataSize(int width, int height) {
         mDataSize.x = width;
         mDataSize.y = height;
+        String outputFile = mContext.getExternalCacheDir() + "/1234.mp4";
+        audioRecorderHandlerThread = new AudioRecorderHandlerThread("Audio Recorder Thread", Process.THREAD_PRIORITY_URGENT_AUDIO, outputFile, mDataSize.x, mDataSize.y);
+        audioRecorderHandlerThread.setCallback(new Handler(Looper.getMainLooper()));
+        audioRecorderHandlerThread.start();
+        encoder = audioRecorderHandlerThread.getVideoEncoder();
     }
 
     public SurfaceTexture getTexture() {
@@ -155,11 +175,28 @@ public class TextureController implements GLSurfaceView.Renderer {
         GLES20.glDeleteTextures(1, mExportTexture, 0);
     }
 
+
+    public void startRecord(String path) {
+        isRecord = true;
+        if (audioRecorderHandlerThread!=null){
+            audioRecorderHandlerThread.startRecording();
+        }
+    }
+
+    public void stopRecord() {
+
+        isRecord = false;
+        if (audioRecorderHandlerThread!=null){
+            audioRecorderHandlerThread.stopRecording();
+        }
+
+    }
+
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         MatrixUtils.getMatrix(SM, mShowType,
                 mDataSize.x, mDataSize.y, width, height);
-      //  MatrixUtils.scale(SM,scaleX,scaleY);
+        //  MatrixUtils.scale(SM,scaleX,scaleY);
         mShowFilter.setSize(width, height);
         //   mShowFilter.setMatrix(SM);
         mGroupFilter.setSize(mDataSize.x, mDataSize.y);
@@ -216,13 +253,6 @@ public class TextureController implements GLSurfaceView.Renderer {
         }
     }
 
-    public void startRecord() {
-        isRecord = true;
-    }
-
-    public void stopRecord() {
-        isRecord = false;
-    }
 
     public void takePhoto() {
         isShoot = true;
@@ -286,7 +316,12 @@ public class TextureController implements GLSurfaceView.Renderer {
     private void frameCallback() {
         GLES20.glReadPixels(0, 0, frameCallbackWidth, frameCallbackHeight,
                 GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, outPutBuffer[indexOutput]);
+       byte[] bytes=  outPutBuffer[indexOutput].array();
         mFrameCallback.onFrame(outPutBuffer[indexOutput].array(), 0);
+        if (isRecord && encoder != null && audioRecorderHandlerThread.isStart) {
+        //    final byte[] tempData = YUVRotateUtil.rotateYUV420Degree270(bytes, mDataSize.x, mDataSize.y);
+            encoder.encode(bytes,bytes.length,encoder.getPTSUs());
+        }
     }
 
     public void create(int width, int height) {
@@ -299,6 +334,15 @@ public class TextureController implements GLSurfaceView.Renderer {
         if (mRenderer != null) {
             mRenderer.onDestroy();
         }
+        stopRecord();
+
+        audioRecorderHandlerThread.setCallback(null);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            audioRecorderHandlerThread.quitSafely();
+        }else{
+            audioRecorderHandlerThread.quit();
+        }
+
         mGLView.surfaceDestroyed(null);
         mGLView.detachedFromWindow();
         mGLView.clear();
