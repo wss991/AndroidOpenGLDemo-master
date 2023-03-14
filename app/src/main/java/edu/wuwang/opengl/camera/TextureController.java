@@ -1,16 +1,12 @@
 package edu.wuwang.opengl.camera;
 
-import android.graphics.Matrix;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.view.View;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.microedition.khronos.egl.EGL10;
@@ -30,12 +26,12 @@ import android.widget.ImageView;
 
 import edu.wuwang.opengl.encoder.AudioRecorderHandlerThread;
 import edu.wuwang.opengl.encoder.VideoEncoder;
-import edu.wuwang.opengl.encoder.YUVRotateUtil;
 import edu.wuwang.opengl.filter.AFilter;
 import edu.wuwang.opengl.filter.GroupFilter;
 import edu.wuwang.opengl.filter.NoFilter;
 import edu.wuwang.opengl.utils.EasyGlUtils;
 import edu.wuwang.opengl.utils.MatrixUtils;
+import edu.wuwang.surface.CodecUtil;
 
 /**
  * Description: 借助GLSurfaceView创建的GL环境，做渲染工作。不将内容渲染到GLSurfaceView
@@ -77,6 +73,7 @@ public class TextureController implements GLSurfaceView.Renderer {
 
     private VideoEncoder encoder;
     private AudioRecorderHandlerThread audioRecorderHandlerThread;
+    private CodecUtil codeUtil;
 
     public TextureController(Context context) {
         this.mContext = context;
@@ -178,7 +175,7 @@ public class TextureController implements GLSurfaceView.Renderer {
 
     public void startRecord(String path) {
         isRecord = true;
-        if (audioRecorderHandlerThread!=null){
+        if (audioRecorderHandlerThread != null) {
             audioRecorderHandlerThread.startRecording();
         }
     }
@@ -186,8 +183,12 @@ public class TextureController implements GLSurfaceView.Renderer {
     public void stopRecord() {
 
         isRecord = false;
-        if (audioRecorderHandlerThread!=null){
+        if (audioRecorderHandlerThread != null) {
             audioRecorderHandlerThread.stopRecording();
+        }
+
+        if (isRecord && codeUtil != null) {
+            codeUtil.release();
         }
 
     }
@@ -221,6 +222,14 @@ public class TextureController implements GLSurfaceView.Renderer {
             mShowFilter.draw();
             if (mRenderer != null) {
                 mRenderer.onDrawFrame(gl);
+            }
+            if (codeUtil == null) {
+                codeUtil = new CodecUtil(
+                        mContext,
+                        mDataSize.x,
+                        mDataSize.y
+                );
+                codeUtil.init();
             }
             callbackIfNeeded();
         }
@@ -316,11 +325,16 @@ public class TextureController implements GLSurfaceView.Renderer {
     private void frameCallback() {
         GLES20.glReadPixels(0, 0, frameCallbackWidth, frameCallbackHeight,
                 GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, outPutBuffer[indexOutput]);
-       byte[] bytes=  outPutBuffer[indexOutput].array();
+        byte[] bytes = outPutBuffer[indexOutput].array();
         mFrameCallback.onFrame(outPutBuffer[indexOutput].array(), 0);
         if (isRecord && encoder != null && audioRecorderHandlerThread.isStart) {
-        //    final byte[] tempData = YUVRotateUtil.rotateYUV420Degree270(bytes, mDataSize.x, mDataSize.y);
-            encoder.encode(bytes,bytes.length,encoder.getPTSUs());
+            //    final byte[] tempData = YUVRotateUtil.rotateYUV420Degree270(bytes, mDataSize.x, mDataSize.y);
+            encoder.encode(bytes, bytes.length, encoder.getPTSUs());
+        }
+        // 利用 surface
+        if (isRecord && codeUtil != null) {
+            codeUtil.setTextureId(mShowFilter.getTextureId());
+            codeUtil.start();
         }
     }
 
@@ -335,11 +349,15 @@ public class TextureController implements GLSurfaceView.Renderer {
             mRenderer.onDestroy();
         }
         stopRecord();
+        if (codeUtil!=null){
+            codeUtil.release();
+            codeUtil = null;
+        }
 
         audioRecorderHandlerThread.setCallback(null);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
             audioRecorderHandlerThread.quitSafely();
-        }else{
+        } else {
             audioRecorderHandlerThread.quit();
         }
 

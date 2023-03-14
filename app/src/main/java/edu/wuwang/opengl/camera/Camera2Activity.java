@@ -32,7 +32,6 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
-import android.os.Process;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.RequiresApi;
@@ -50,11 +49,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -62,9 +59,7 @@ import javax.microedition.khronos.opengles.GL10;
 
 import edu.wuwang.opengl.BaseActivity;
 import edu.wuwang.opengl.R;
-import edu.wuwang.opengl.encoder.AudioRecorderHandlerThread;
 import edu.wuwang.opengl.encoder.Messages;
-import edu.wuwang.opengl.encoder.VideoEncoder;
 import edu.wuwang.opengl.filter.TimeMarkFilter;
 import edu.wuwang.opengl.filter.ZipPkmAnimationFilter;
 import edu.wuwang.opengl.utils.CompareSizesByArea;
@@ -183,11 +178,11 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
         switch (view.getId()) {
             case R.id.mShutter:
                 mController.takePhoto();
-                if (isRecording) {
+              /*  if (isRecording) {
                     mController.stopRecord();
                 } else {
                     mController.startRecord(getExternalCacheDir() + File.separator + "mp4record.mp4");
-                }
+                }*/
                 isRecording = !isRecording;
                // startRecording();
                 break;
@@ -224,7 +219,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
 
     @Override
     public void onFrame(final byte[] bytes, long time) {
-/*        new Thread(new Runnable() {
+        new Thread(new Runnable() {
             @Override
             public void run() {
                 Bitmap bitmap = Bitmap.createBitmap(mController.getmDataSize().x, mController.getmDataSize().y, Bitmap.Config.ARGB_8888);
@@ -233,7 +228,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                 saveBitmap(bitmap);
                 bitmap.recycle();
             }
-        }).start();*/
+        }).start();
     }
 
     protected String getSD() {
@@ -469,7 +464,7 @@ public class Camera2Activity extends BaseActivity implements FrameCallback {
                                     .getTexture());
                             final CaptureRequest.Builder builder = mDevice.createCaptureRequest
                                     (TEMPLATE_PREVIEW);
-                            builder.addTarget(surface);
+                           builder.addTarget(surface);
                             mController.getTexture().setDefaultBufferSize(
                                     realPreviewWidth, realPreviewHeight);
                             mDevice.createCaptureSession(Arrays.asList(surface), new

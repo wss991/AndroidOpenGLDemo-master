@@ -19,7 +19,7 @@ public class VideoEncoder {
     private static final String TAG = "VideoEncoder";
     private static final String MIME_TYPE = "video/avc";
     private static final int FRAME_RATE = 20;
-    private static final int COLOR_FORMAT = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV422Flexible;
+    private static final int COLOR_FORMAT = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar;
     private int bitRate;
 
     private static final int TIMEOUT_US = 10000;
